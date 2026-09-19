@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class IStepProvider(ABC):
+class StepProvider(ABC):
     """Executes one task. A concrete provider is registered against a
     `task_type` string via @register_step_provider (see registry.py)."""
 
@@ -37,13 +37,13 @@ class IStepProvider(ABC):
         raise NotImplementedError
 
 
-class ClassicalStepProvider(IStepProvider, ABC):
+class ClassicalStepProvider(StepProvider, ABC):
     """Base class for step providers that run on ordinary CPU/classical
     code. Intentionally left unimplemented - shared classical-provider
     behavior (retry policy, timeouts, whatever emerges) lands here later."""
 
 
-class QuantumStepProvider(IStepProvider, ABC):
+class QuantumStepProvider(StepProvider, ABC):
     """Base class for step providers backed by a quantum job (e.g. IonQ's
     simulator or QPU targets). Intentionally left unimplemented - shared
     quantum-provider behavior (job submission/polling, backend selection)

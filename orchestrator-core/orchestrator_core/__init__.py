@@ -7,7 +7,7 @@ from .registry import (
     registered_task_types,
 )
 from .scheduler import GraphValidationError, Scheduler
-from .step_provider import ClassicalStepProvider, IStepProvider, QuantumStepProvider
+from .step_provider import ClassicalStepProvider, StepProvider, QuantumStepProvider
 
 __all__ = [
     "Experiment",

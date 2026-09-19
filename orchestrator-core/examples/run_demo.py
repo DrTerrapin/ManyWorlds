@@ -15,12 +15,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from orchestrator_core import Experiment, IStepProvider, Scheduler, Task, register_step_provider
+from orchestrator_core import Experiment, StepProvider, Scheduler, Task, register_step_provider
 from orchestrator_core.persistence import InMemoryExperimentRepository
 
 
 @register_step_provider("demo.echo")
-class EchoProvider(IStepProvider):
+class EchoProvider(StepProvider):
     """Toy provider: just returns whatever parameters it was given."""
 
     async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
@@ -29,7 +29,7 @@ class EchoProvider(IStepProvider):
 
 
 @register_step_provider("demo.always_fails")
-class AlwaysFailsProvider(IStepProvider):
+class AlwaysFailsProvider(StepProvider):
     """Toy provider: always raises, to demonstrate cascading failure."""
 
     async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:

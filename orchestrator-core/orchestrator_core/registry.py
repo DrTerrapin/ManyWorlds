@@ -21,9 +21,9 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .step_provider import IStepProvider
+from .step_provider import StepProvider
 
-_registry: dict[str, type[IStepProvider]] = {}
+_registry: dict[str, type[StepProvider]] = {}
 
 
 class UnknownTaskTypeError(KeyError):
@@ -36,7 +36,7 @@ class DuplicateTaskTypeError(ValueError):
 
 def register_step_provider(
     task_type: str,
-) -> Callable[[type[IStepProvider]], type[IStepProvider]]:
+) -> Callable[[type[StepProvider]], type[StepProvider]]:
     """Class decorator: records `task_type -> cls` in the registry.
 
     Usage:
@@ -45,8 +45,8 @@ def register_step_provider(
             async def execute(self, parameters): ...
     """
 
-    def decorator(cls: type[IStepProvider]) -> type[IStepProvider]:
-        if not issubclass(cls, IStepProvider):
+    def decorator(cls: type[StepProvider]) -> type[StepProvider]:
+        if not issubclass(cls, StepProvider):
             raise TypeError(
                 f"{cls.__name__} must inherit from IStepProvider to be registered."
             )
