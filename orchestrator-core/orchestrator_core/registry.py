@@ -63,7 +63,7 @@ def register_step_provider(
     return decorator
 
 
-def get_step_provider(task_type: str) -> type[IStepProvider]:
+def get_step_provider(task_type: str) -> type[StepProvider]:
     """Resolves a task_type string to its registered provider class.
 
     Raises UnknownTaskTypeError (with the list of what *is* registered) if
