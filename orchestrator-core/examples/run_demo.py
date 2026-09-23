@@ -41,6 +41,8 @@ from orchestrator_core import (
     TaskDefinition,
     TaskExecutor,
     TaskProvider,
+    VariableRef,
+    VariableStore,
     get_task_provider,
     register_task_provider,
 )
@@ -51,7 +53,7 @@ from orchestrator_core.persistence import InMemoryExperimentRepository
 class EchoProvider(TaskProvider):
     """Toy provider: just returns whatever parameters it was given."""
 
-    async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
         await asyncio.sleep(0.05)  # stand-in for real work
         return {"echoed": parameters}
 
@@ -60,7 +62,7 @@ class EchoProvider(TaskProvider):
 class AlwaysFailsProvider(TaskProvider):
     """Toy provider: always raises, to demonstrate cascading failure."""
 
-    async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
         await asyncio.sleep(0.05)
         raise RuntimeError("simulated failure for demo purposes")
 
@@ -69,7 +71,7 @@ class AlwaysFailsProvider(TaskProvider):
 class MakeListProvider(TaskProvider):
     """Toy provider: produces the list a fan_out template expands over."""
 
-    async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
         await asyncio.sleep(0.05)
         return {"items": [1, 2, 3, 4]}
 
@@ -78,7 +80,7 @@ class MakeListProvider(TaskProvider):
 class SquareProvider(TaskProvider):
     """Toy provider: one fan_out instance's work - squares its item."""
 
-    async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
         await asyncio.sleep(0.05)
         n = parameters["n"]
         return {"squared": n * n}
@@ -89,7 +91,7 @@ class JoinProvider(TaskProvider):
     """Toy provider: downstream task that only runs once every fan_out
     instance (or every not-skipped branch) it depends on has resolved."""
 
-    async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
         await asyncio.sleep(0.05)
         return {"joined": True}
 
@@ -98,9 +100,32 @@ class JoinProvider(TaskProvider):
 class ClassifyProvider(TaskProvider):
     """Toy provider: produces the value the branch demo's run_if conditions test."""
 
-    async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
         await asyncio.sleep(0.05)
         return {"level": "high"}
+
+
+@register_task_provider("demo.set_threshold")
+class SetThresholdProvider(TaskProvider):
+    """Toy provider: writes variables the rest of the variables demo consumes -
+    a scalar (for string-interpolation substitution) and a list (for a
+    VariableRef-based fan_out)."""
+
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
+        await asyncio.sleep(0.05)
+        variables.set_variable("threshold", 3)
+        variables.set_variable("candidates", [1, 2, 3, 4, 5])
+        return {"set": ["threshold", "candidates"]}
+
+
+@register_task_provider("demo.report_uri")
+class ReportUriProvider(TaskProvider):
+    """Toy provider: just echoes back a parameter, to show the value it
+    received after $(varName) substitution ran."""
+
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
+        await asyncio.sleep(0.05)
+        return {"uri": parameters["uri"]}
 
 
 def build_dag_demo_experiment() -> ExperimentDefinition:
@@ -167,6 +192,36 @@ def build_branch_demo_experiment() -> ExperimentDefinition:
     )
 
 
+def build_variables_demo_experiment() -> ExperimentDefinition:
+    return ExperimentDefinition(
+        name="Variable store demo",
+        tasks=[
+            TaskDefinition(name="SetThreshold", order=0, type="demo.set_threshold"),
+            # Type-preserving substitution would keep "n" as the int 3 if
+            # used as a whole-string placeholder; here it's embedded inside
+            # a larger string, so string-interpolation substitution applies
+            # and the int gets stringified into the URL.
+            TaskDefinition(
+                name="Report",
+                order=1,
+                type="demo.report_uri",
+                parameters={"uri": "s3://bucket/threshold-$(threshold).csv"},
+                depends_on=["SetThreshold"],
+            ),
+            # VariableRef-based fan_out: expands over a *variable* (set by
+            # SetThreshold above), not a ResultRef.
+            TaskDefinition(
+                name="Square",
+                order=1,
+                type="demo.square",
+                depends_on=["SetThreshold"],
+                fan_out=FanOutSpec(over=VariableRef(name="candidates"), item_parameter="n"),
+            ),
+            TaskDefinition(name="Join", order=2, type="demo.join", depends_on=["Square"]),
+        ],
+    )
+
+
 def print_result(result: ScheduledExperiment) -> None:
     print(f"Experiment '{result.name}' finished with status: {result.status.value}\n")
     # Sort by when each task last changed, not by insertion order - fan-out
@@ -199,8 +254,10 @@ async def run_to_completion(executor: TaskExecutor, experiment: ScheduledExperim
 
 async def _execute_and_report(executor: TaskExecutor, experiment: ScheduledExperiment, task: ScheduledTask) -> None:
     try:
+        resolved_parameters = executor.resolve_parameters(experiment, task)
         provider = get_task_provider(task.type)()
-        result = await provider.execute(task.parameters)
+        variable_store = VariableStore(experiment.variables)
+        result = await provider.execute(resolved_parameters, variable_store)
         await executor.report_task_result(experiment, task.id, status=RunStatus.SUCCEEDED, result=result)
     except Exception as exc:  # noqa: BLE001 - a provider's own bug is still a task failure
         await executor.report_task_result(
@@ -213,7 +270,12 @@ async def main() -> None:
     scheduler = Scheduler(repository)
     executor = TaskExecutor(repository)
 
-    for build_experiment in (build_dag_demo_experiment, build_fanout_demo_experiment, build_branch_demo_experiment):
+    for build_experiment in (
+        build_dag_demo_experiment,
+        build_fanout_demo_experiment,
+        build_branch_demo_experiment,
+        build_variables_demo_experiment,
+    ):
         scheduled = await scheduler.schedule_experiment(build_experiment())
         result = await run_to_completion(executor, scheduled)
         print_result(result)

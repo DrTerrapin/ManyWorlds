@@ -20,18 +20,26 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from .variable_store import VariableStore
+
 
 class TaskProvider(ABC):
     """Executes one task. A concrete provider is registered against a
     `task_type` string via @register_step_provider (see registry.py)."""
 
     @abstractmethod
-    async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, parameters: dict[str, Any], variables: VariableStore) -> dict[str, Any]:
         """Run the task and return its result.
 
-        `parameters` is exactly `ScheduledTask.parameters` from the
-        experiment. The returned dict becomes `ScheduledTask.result`. Raise
-        any exception to fail the task - the scheduler catches it, records
+        `parameters` is `ScheduledTask.parameters` from the experiment,
+        with any `$(varName)` placeholders already substituted against the
+        experiment's variable store (see TaskExecutor.resolve_parameters).
+        `variables` is a VariableStore over that same variable store - call
+        `variables.set_variable(name, value)` to make a value available to
+        later tasks, either via `$(varName)` substitution in their own
+        parameters or via a VariableRef in a downstream fan_out/run_if. The
+        returned dict becomes `ScheduledTask.result`. Raise any exception to
+        fail the task - the scheduler catches it, records
         `ScheduledTask.error`, and fails/cascades from there.
         """
         raise NotImplementedError

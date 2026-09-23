@@ -62,11 +62,31 @@ class ResultRef(BaseModel):
         return value
 
 
-class BranchCondition(BaseModel):
-    """A structured (non-eval) predicate against a ResultRef-resolved
-    value. Exactly one of `equals` / `in_` must be set."""
+class VariableRef(BaseModel):
+    """Points at a value in the experiment's variable store.
 
-    ref: ResultRef
+    `name` is the variable's name (as set via VariableStore.set_variable).
+    `path` is a dotted path into that value, same semantics as
+    ResultRef.path - "" means the whole value, numeric segments index
+    into lists.
+    """
+
+    name: str
+    path: str = ""
+
+    def resolve(self, variables: dict[str, Any]) -> Any:
+        value = variables[self.name]
+        for part in (p for p in self.path.split(".") if p):
+            value = value[int(part)] if isinstance(value, list) else value[part]
+        return value
+
+
+class BranchCondition(BaseModel):
+    """A structured (non-eval) predicate against a ResultRef- or
+    VariableRef-resolved value. Exactly one of `equals` / `in_` must be
+    set."""
+
+    ref: ResultRef | VariableRef
     equals: Any | None = None
     in_: list[Any] | None = Field(default=None, alias="in")
 
@@ -81,7 +101,7 @@ class FanOutSpec(BaseModel):
     """Marks a TaskDefinition as a template: expanded into one
     ScheduledTask per item of `over`'s resolved list, at runtime."""
 
-    over: ResultRef
+    over: ResultRef | VariableRef
     item_parameter: str
 
 
@@ -116,6 +136,7 @@ class ExperimentDefinition(BaseModel):
 
     name: str
     tasks: list[TaskDefinition]
+    variables: dict[str, Any] = Field(default_factory=dict)  # seeded onto ScheduledExperiment.variables
 
 
 class ScheduledTask(TaskDefinition):
@@ -145,6 +166,7 @@ class ScheduledExperiment(ExperimentDefinition):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     tasks: list[ScheduledTask]
+    variables: dict[str, Any] = Field(default_factory=dict)
 
     status: RunStatus = RunStatus.PENDING
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

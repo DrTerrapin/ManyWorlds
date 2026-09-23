@@ -32,8 +32,14 @@ class ExperimentRepository(ABC):
         result: dict[str, Any] | None = None,
         error: str | None = None,
         note: str | None = None,
+        variables: dict[str, Any] | None = None,
     ) -> None:
         """Updates one task's status/result/error/note within an experiment.
+
+        `variables=None` means no change to the experiment's variable
+        store; pass the current full snapshot (`experiment.variables`) to
+        persist writes a task's TaskProvider made via VariableStore during
+        this task's run.
 
         Raises KeyError if the experiment or task doesn't exist.
         """

@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import uuid
 
-from .models import ExperimentDefinition, RunStatus, ScheduledExperiment, ScheduledTask
+from .models import ExperimentDefinition, ResultRef, RunStatus, ScheduledExperiment, ScheduledTask
 from .persistence.base import ExperimentRepository
 
 
@@ -54,6 +54,7 @@ class Scheduler:
             id=uuid.uuid4(),
             name=experiment.name,
             tasks=list(scheduled_by_name.values()),
+            variables=dict(experiment.variables),
             status=RunStatus.PENDING,
             created_at=_now(),
             updated_at=_now(),
@@ -85,27 +86,31 @@ class Scheduler:
                 )
 
             if task.fan_out is not None:
-                source_name = task.fan_out.over.task
-                if source_name == task.name:
-                    raise GraphValidationError(f"Task '{task.name}' cannot fan out over its own result.")
-                if source_name not in task.depends_on:
-                    raise GraphValidationError(
-                        f"Task '{task.name}' has fan_out.over referencing '{source_name}', "
-                        "which must also be listed in depends_on."
-                    )
-                source_task = tasks_by_name[source_name]
-                if source_task.fan_out is not None:
-                    raise GraphValidationError(
-                        f"Task '{task.name}' cannot fan out over '{source_name}', which is itself "
-                        "a fan_out template - nested fan-out isn't supported."
-                    )
+                # A VariableRef has no sibling task to check structurally - an
+                # unset variable becomes a runtime failure at expansion time
+                # instead (see executor.py's _resolve_ref / _expand_task).
+                if isinstance(task.fan_out.over, ResultRef):
+                    source_name = task.fan_out.over.task
+                    if source_name == task.name:
+                        raise GraphValidationError(f"Task '{task.name}' cannot fan out over its own result.")
+                    if source_name not in task.depends_on:
+                        raise GraphValidationError(
+                            f"Task '{task.name}' has fan_out.over referencing '{source_name}', "
+                            "which must also be listed in depends_on."
+                        )
+                    source_task = tasks_by_name[source_name]
+                    if source_task.fan_out is not None:
+                        raise GraphValidationError(
+                            f"Task '{task.name}' cannot fan out over '{source_name}', which is itself "
+                            "a fan_out template - nested fan-out isn't supported."
+                        )
                 if task.fan_out.item_parameter in task.parameters:
                     raise GraphValidationError(
                         f"Task '{task.name}' has fan_out.item_parameter '{task.fan_out.item_parameter}' "
                         "which collides with an existing key in its own parameters."
                     )
 
-            if task.run_if is not None:
+            if task.run_if is not None and isinstance(task.run_if.ref, ResultRef):
                 source_name = task.run_if.ref.task
                 if source_name not in task.depends_on:
                     raise GraphValidationError(

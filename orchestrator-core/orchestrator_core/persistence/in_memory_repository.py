@@ -36,6 +36,7 @@ class InMemoryExperimentRepository(ExperimentRepository):
         result: dict[str, Any] | None = None,
         error: str | None = None,
         note: str | None = None,
+        variables: dict[str, Any] | None = None,
     ) -> None:
         experiment = self._store.get(experiment_id)
         if experiment is None:
@@ -46,6 +47,8 @@ class InMemoryExperimentRepository(ExperimentRepository):
         task.result = result
         task.error = error
         task.note = note
+        if variables is not None:
+            experiment.variables = variables
 
     async def append_tasks(self, experiment_id: str, tasks: list[ScheduledTask]) -> None:
         experiment = self._store.get(experiment_id)

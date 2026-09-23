@@ -22,8 +22,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from .models import BranchCondition, RunStatus, ScheduledExperiment, ScheduledTask
+from .models import BranchCondition, ResultRef, RunStatus, ScheduledExperiment, ScheduledTask, VariableRef
 from .persistence.base import ExperimentRepository
+from .variable_store import substitute_variables
 
 
 class TaskExecutor:
@@ -63,9 +64,22 @@ class TaskExecutor:
                 if task.fan_out is not None:
                     await self._expand_task(experiment, task)
                     progressed = True
-                elif task.run_if is not None and not self._branch_holds(experiment, task.run_if):
-                    await self._skip_task(experiment, task, "branch condition not met")
-                    progressed = True
+                elif task.run_if is not None:
+                    try:
+                        holds = self._branch_holds(experiment, task.run_if)
+                    except Exception as exc:  # noqa: BLE001 - a bad run_if reference is a task failure, not a crash
+                        await self._fail_task(experiment, task, f"run_if evaluation failed: {exc}")
+                        progressed = True
+                        continue
+                    if not holds:
+                        await self._skip_task(experiment, task, "branch condition not met")
+                        progressed = True
+                    else:
+                        task.status = RunStatus.RUNNING
+                        task.updated_at = _now()
+                        await self._repository.update_task(experiment.id, task.id, status=task.status)
+                        claimed.append(task)
+                        progressed = True
                 else:
                     task.status = RunStatus.RUNNING
                     task.updated_at = _now()
@@ -107,7 +121,18 @@ class TaskExecutor:
         task.result = result
         task.error = error
         task.updated_at = _now()
-        await self._repository.update_task(experiment.id, task_id, status=status, result=result, error=error)
+        await self._repository.update_task(
+            experiment.id, task_id, status=status, result=result, error=error, variables=experiment.variables
+        )
+
+    def resolve_parameters(self, experiment: ScheduledExperiment, task: ScheduledTask) -> dict[str, Any]:
+        """Resolves `$(varName)` placeholders in `task.parameters` against
+        the experiment's current variable store. Call this immediately
+        before running the task's TaskProvider - raises
+        UnresolvedVariableError (a KeyError subclass) if a referenced
+        variable isn't set, the same way an unresolved ResultRef fails a
+        task today."""
+        return substitute_variables(task.parameters, experiment.variables)
 
     def is_complete(self, experiment: ScheduledExperiment) -> bool:
         """True once every task has reached a terminal status."""
@@ -142,10 +167,8 @@ class TaskExecutor:
         )
 
     async def _expand_task(self, experiment: ScheduledExperiment, template: ScheduledTask) -> None:
-        results_by_name = {t.name: t.result for t in experiment.tasks if t.result is not None}
-
         try:
-            items = template.fan_out.over.resolve(results_by_name)
+            items = _resolve_ref(template.fan_out.over, experiment)
             if not isinstance(items, list):
                 raise TypeError(f"resolved to {type(items).__name__}, expected a list")
         except Exception as exc:  # noqa: BLE001 - a bad fan_out reference is a task failure, not a crash
@@ -177,11 +200,17 @@ class TaskExecutor:
         )
 
     def _branch_holds(self, experiment: ScheduledExperiment, condition: BranchCondition) -> bool:
-        results_by_name = {t.name: t.result for t in experiment.tasks if t.result is not None}
-        value = condition.ref.resolve(results_by_name)
+        value = _resolve_ref(condition.ref, experiment)
         if condition.equals is not None:
             return value == condition.equals
         return value in condition.in_
+
+
+def _resolve_ref(ref: ResultRef | VariableRef, experiment: ScheduledExperiment) -> Any:
+    if isinstance(ref, VariableRef):
+        return ref.resolve(experiment.variables)
+    results_by_name = {t.name: t.result for t in experiment.tasks if t.result is not None}
+    return ref.resolve(results_by_name)
 
 
 def _dependency_status(experiment: ScheduledExperiment, dep_id: uuid.UUID) -> RunStatus:

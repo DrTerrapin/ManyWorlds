@@ -7,6 +7,7 @@ from .models import (
     ScheduledExperiment,
     ScheduledTask,
     TaskDefinition,
+    VariableRef,
 )
 from .registry import (
     DuplicateTaskTypeError,
@@ -18,6 +19,7 @@ from .registry import (
 from .executor import TaskExecutor
 from .scheduler import GraphValidationError, Scheduler
 from .task_provider import ClassicalTaskProvider, TaskProvider, QuantumTaskProvider
+from .variable_store import UnresolvedVariableError, VariableStore, substitute_variables
 
 __all__ = [
     "BranchCondition",
@@ -28,6 +30,7 @@ __all__ = [
     "ScheduledExperiment",
     "ScheduledTask",
     "TaskDefinition",
+    "VariableRef",
     "ClassicalTaskProvider",
     "QuantumTaskProvider",
     "TaskProvider",
@@ -39,4 +42,7 @@ __all__ = [
     "Scheduler",
     "GraphValidationError",
     "TaskExecutor",
+    "VariableStore",
+    "substitute_variables",
+    "UnresolvedVariableError",
 ]

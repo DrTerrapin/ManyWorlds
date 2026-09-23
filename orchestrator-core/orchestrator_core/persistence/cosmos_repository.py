@@ -93,6 +93,7 @@ class CosmosExperimentRepository(ExperimentRepository):
         result: dict[str, Any] | None = None,
         error: str | None = None,
         note: str | None = None,
+        variables: dict[str, Any] | None = None,
     ) -> None:
         experiment = await self.load_experiment(experiment_id)
         task = experiment.get_task(task_id)  # raises KeyError if missing
@@ -100,6 +101,8 @@ class CosmosExperimentRepository(ExperimentRepository):
         task.result = result
         task.error = error
         task.note = note
+        if variables is not None:
+            experiment.variables = variables
         await self.save_experiment(experiment)
 
     async def append_tasks(self, experiment_id: str, tasks: list[ScheduledTask]) -> None:
