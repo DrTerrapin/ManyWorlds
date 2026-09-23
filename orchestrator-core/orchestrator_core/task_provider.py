@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class StepProvider(ABC):
+class TaskProvider(ABC):
     """Executes one task. A concrete provider is registered against a
     `task_type` string via @register_step_provider (see registry.py)."""
 
@@ -29,22 +29,22 @@ class StepProvider(ABC):
     async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
         """Run the task and return its result.
 
-        `parameters` is exactly `Task.parameters` from the experiment
-        definition. The returned dict becomes `Task.result`. Raise any
-        exception to fail the task - the scheduler catches it, records
-        `Task.error`, and fails/cascades from there.
+        `parameters` is exactly `ScheduledTask.parameters` from the
+        experiment. The returned dict becomes `ScheduledTask.result`. Raise
+        any exception to fail the task - the scheduler catches it, records
+        `ScheduledTask.error`, and fails/cascades from there.
         """
         raise NotImplementedError
 
 
-class ClassicalStepProvider(StepProvider, ABC):
-    """Base class for step providers that run on ordinary CPU/classical
+class ClassicalTaskProvider(TaskProvider, ABC):
+    """Base class for task providers that run on ordinary CPU/classical
     code. Intentionally left unimplemented - shared classical-provider
     behavior (retry policy, timeouts, whatever emerges) lands here later."""
 
 
-class QuantumStepProvider(StepProvider, ABC):
-    """Base class for step providers backed by a quantum job (e.g. IonQ's
+class QuantumTaskProvider(TaskProvider, ABC):
+    """Base class for task providers backed by a quantum job (e.g. IonQ's
     simulator or QPU targets). Intentionally left unimplemented - shared
     quantum-provider behavior (job submission/polling, backend selection)
     lands here later."""

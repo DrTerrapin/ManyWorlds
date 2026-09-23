@@ -21,9 +21,9 @@ from __future__ import annotations
 
 from typing import Callable
 
-from .step_provider import StepProvider
+from .task_provider import TaskProvider
 
-_registry: dict[str, type[StepProvider]] = {}
+_registry: dict[str, type[TaskProvider]] = {}
 
 
 class UnknownTaskTypeError(KeyError):
@@ -34,19 +34,19 @@ class DuplicateTaskTypeError(ValueError):
     """Raised when two providers try to register the same task_type."""
 
 
-def register_step_provider(
+def register_task_provider(
     task_type: str,
-) -> Callable[[type[StepProvider]], type[StepProvider]]:
+) -> Callable[[type[TaskProvider]], type[TaskProvider]]:
     """Class decorator: records `task_type -> cls` in the registry.
 
     Usage:
-        @register_step_provider("risk.quantum_correlation")
-        class QuantumRiskProvider(QuantumStepProvider):
+        @register_task_provider("risk.quantum_correlation")
+        class QuantumRiskProvider(QuantumTaskProvider):
             async def execute(self, parameters): ...
     """
 
-    def decorator(cls: type[StepProvider]) -> type[StepProvider]:
-        if not issubclass(cls, StepProvider):
+    def decorator(cls: type[TaskProvider]) -> type[TaskProvider]:
+        if not issubclass(cls, TaskProvider):
             raise TypeError(
                 f"{cls.__name__} must inherit from IStepProvider to be registered."
             )
@@ -63,7 +63,7 @@ def register_step_provider(
     return decorator
 
 
-def get_step_provider(task_type: str) -> type[StepProvider]:
+def get_task_provider(task_type: str) -> type[TaskProvider]:
     """Resolves a task_type string to its registered provider class.
 
     Raises UnknownTaskTypeError (with the list of what *is* registered) if
@@ -74,7 +74,7 @@ def get_step_provider(task_type: str) -> type[StepProvider]:
         return _registry[task_type]
     except KeyError:
         raise UnknownTaskTypeError(
-            f"No step provider registered for task_type '{task_type}'. "
+            f"No task provider registered for task_type '{task_type}'. "
             f"Known task types: {registered_task_types()}. "
             "Make sure the module defining that provider has been imported "
             "before scheduling this task."

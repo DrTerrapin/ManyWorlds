@@ -7,21 +7,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models import Experiment, RunStatus
+from ..models import RunStatus, ScheduledExperiment, ScheduledTask
 from .base import ExperimentRepository
 
 
 class InMemoryExperimentRepository(ExperimentRepository):
     def __init__(self) -> None:
-        self._store: dict[str, Experiment] = {}
+        self._store: dict[str, ScheduledExperiment] = {}
 
-    async def save_experiment(self, experiment: Experiment) -> None:
+    async def save_experiment(self, experiment: ScheduledExperiment) -> None:
         # Deep-copy on the way in so callers mutating their own Experiment
         # object afterward can't silently corrupt what we've "persisted" -
         # matches how a real database boundary behaves.
         self._store[experiment.id] = experiment.model_copy(deep=True)
 
-    async def load_experiment(self, experiment_id: str) -> Experiment:
+    async def load_experiment(self, experiment_id: str) -> ScheduledExperiment:
         try:
             return self._store[experiment_id].model_copy(deep=True)
         except KeyError:
@@ -35,6 +35,7 @@ class InMemoryExperimentRepository(ExperimentRepository):
         status: RunStatus,
         result: dict[str, Any] | None = None,
         error: str | None = None,
+        note: str | None = None,
     ) -> None:
         experiment = self._store.get(experiment_id)
         if experiment is None:
@@ -44,3 +45,16 @@ class InMemoryExperimentRepository(ExperimentRepository):
         task.status = status
         task.result = result
         task.error = error
+        task.note = note
+
+    async def append_tasks(self, experiment_id: str, tasks: list[ScheduledTask]) -> None:
+        experiment = self._store.get(experiment_id)
+        if experiment is None:
+            raise KeyError(f"No experiment found with id '{experiment_id}'")
+
+        existing_ids = {t.id for t in experiment.tasks}
+        duplicates = existing_ids.intersection(t.id for t in tasks)
+        if duplicates:
+            raise ValueError(f"Task id(s) already exist on experiment '{experiment_id}': {duplicates}")
+
+        experiment.tasks.extend(t.model_copy(deep=True) for t in tasks)

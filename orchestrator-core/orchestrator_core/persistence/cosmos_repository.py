@@ -25,7 +25,7 @@ from typing import Any
 from azure.cosmos import PartitionKey, exceptions
 from azure.cosmos.aio import ContainerProxy, CosmosClient
 
-from ..models import Experiment, RunStatus
+from ..models import RunStatus, ScheduledExperiment, ScheduledTask
 from .base import ExperimentRepository
 
 
@@ -70,11 +70,11 @@ class CosmosExperimentRepository(ExperimentRepository):
         database = self._client.get_database_client(self._database_name)
         return database.get_container_client(self._container_name)
 
-    async def save_experiment(self, experiment: Experiment) -> None:
+    async def save_experiment(self, experiment: ScheduledExperiment) -> None:
         container = await self._container()
         await container.upsert_item(body=experiment.model_dump(mode="json"))
 
-    async def load_experiment(self, experiment_id: str) -> Experiment:
+    async def load_experiment(self, experiment_id: str) -> ScheduledExperiment:
         container = await self._container()
         try:
             item = await container.read_item(
@@ -82,7 +82,7 @@ class CosmosExperimentRepository(ExperimentRepository):
             )
         except exceptions.CosmosResourceNotFoundError:
             raise KeyError(f"No experiment found with id '{experiment_id}'") from None
-        return Experiment.model_validate(item)
+        return ScheduledExperiment.model_validate(item)
 
     async def update_task(
         self,
@@ -92,10 +92,23 @@ class CosmosExperimentRepository(ExperimentRepository):
         status: RunStatus,
         result: dict[str, Any] | None = None,
         error: str | None = None,
+        note: str | None = None,
     ) -> None:
         experiment = await self.load_experiment(experiment_id)
         task = experiment.get_task(task_id)  # raises KeyError if missing
         task.status = status
         task.result = result
         task.error = error
+        task.note = note
+        await self.save_experiment(experiment)
+
+    async def append_tasks(self, experiment_id: str, tasks: list[ScheduledTask]) -> None:
+        experiment = await self.load_experiment(experiment_id)  # raises KeyError if missing
+
+        existing_ids = {t.id for t in experiment.tasks}
+        duplicates = existing_ids.intersection(t.id for t in tasks)
+        if duplicates:
+            raise ValueError(f"Task id(s) already exist on experiment '{experiment_id}': {duplicates}")
+
+        experiment.tasks.extend(tasks)
         await self.save_experiment(experiment)
