@@ -68,6 +68,7 @@ class TaskExecutor:
                     progressed = True
                 else:
                     task.status = RunStatus.RUNNING
+                    task.updated_at = _now()
                     await self._repository.update_task(experiment.id, task.id, status=task.status)
                     claimed.append(task)
                     progressed = True
@@ -105,6 +106,7 @@ class TaskExecutor:
         task.status = status
         task.result = result
         task.error = error
+        task.updated_at = _now()
         await self._repository.update_task(experiment.id, task_id, status=status, result=result, error=error)
 
     def is_complete(self, experiment: ScheduledExperiment) -> bool:
@@ -119,13 +121,14 @@ class TaskExecutor:
             if any(t.status == RunStatus.FAILED for t in experiment.tasks)
             else RunStatus.SUCCEEDED
         )
-        experiment.updated_at = datetime.now(timezone.utc)
+        experiment.updated_at = _now()
         await self._repository.save_experiment(experiment)
         return experiment
 
     async def _fail_task(self, experiment: ScheduledExperiment, task: ScheduledTask, reason: str) -> None:
         task.status = RunStatus.FAILED
         task.error = reason
+        task.updated_at = _now()
         await self._repository.update_task(
             experiment.id, task.id, status=task.status, error=task.error
         )
@@ -133,6 +136,7 @@ class TaskExecutor:
     async def _skip_task(self, experiment: ScheduledExperiment, task: ScheduledTask, reason: str) -> None:
         task.status = RunStatus.SKIPPED
         task.note = reason
+        task.updated_at = _now()
         await self._repository.update_task(
             experiment.id, task.id, status=task.status, note=task.note
         )
@@ -167,6 +171,7 @@ class TaskExecutor:
 
         template.status = RunStatus.SUCCEEDED
         template.result = {"fanned_out_into": [t.name for t in instances]}
+        template.updated_at = _now()
         await self._repository.update_task(
             experiment.id, template.id, status=template.status, result=template.result
         )
@@ -208,3 +213,7 @@ def _dependency_status(experiment: ScheduledExperiment, dep_id: uuid.UUID) -> Ru
         return RunStatus.RUNNING
 
     return next(t for t in experiment.tasks if t.id == dep_id).status
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)

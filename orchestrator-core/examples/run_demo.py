@@ -169,7 +169,10 @@ def build_branch_demo_experiment() -> ExperimentDefinition:
 
 def print_result(result: ScheduledExperiment) -> None:
     print(f"Experiment '{result.name}' finished with status: {result.status.value}\n")
-    for task in result.tasks:
+    # Sort by when each task last changed, not by insertion order - fan-out
+    # instances are appended to the task list well after the tasks that
+    # were already there, so insertion order doesn't reflect run order.
+    for task in sorted(result.tasks, key=lambda t: t.updated_at):
         line = f"  {task.name:<10} [{task.type:<14}] -> {task.status.value}"
         if task.result is not None:
             line += f"  result={task.result}"
