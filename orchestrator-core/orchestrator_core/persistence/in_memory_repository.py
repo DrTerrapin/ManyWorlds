@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models import RunStatus, ScheduledExperiment
+from ..models import RunStatus, ScheduledExperiment, ScheduledTask
 from .base import ExperimentRepository
 
 
@@ -35,6 +35,7 @@ class InMemoryExperimentRepository(ExperimentRepository):
         status: RunStatus,
         result: dict[str, Any] | None = None,
         error: str | None = None,
+        note: str | None = None,
     ) -> None:
         experiment = self._store.get(experiment_id)
         if experiment is None:
@@ -44,3 +45,16 @@ class InMemoryExperimentRepository(ExperimentRepository):
         task.status = status
         task.result = result
         task.error = error
+        task.note = note
+
+    async def append_tasks(self, experiment_id: str, tasks: list[ScheduledTask]) -> None:
+        experiment = self._store.get(experiment_id)
+        if experiment is None:
+            raise KeyError(f"No experiment found with id '{experiment_id}'")
+
+        existing_ids = {t.id for t in experiment.tasks}
+        duplicates = existing_ids.intersection(t.id for t in tasks)
+        if duplicates:
+            raise ValueError(f"Task id(s) already exist on experiment '{experiment_id}': {duplicates}")
+
+        experiment.tasks.extend(t.model_copy(deep=True) for t in tasks)

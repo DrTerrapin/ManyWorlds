@@ -25,7 +25,7 @@ from typing import Any
 from azure.cosmos import PartitionKey, exceptions
 from azure.cosmos.aio import ContainerProxy, CosmosClient
 
-from ..models import RunStatus, ScheduledExperiment
+from ..models import RunStatus, ScheduledExperiment, ScheduledTask
 from .base import ExperimentRepository
 
 
@@ -92,10 +92,23 @@ class CosmosExperimentRepository(ExperimentRepository):
         status: RunStatus,
         result: dict[str, Any] | None = None,
         error: str | None = None,
+        note: str | None = None,
     ) -> None:
         experiment = await self.load_experiment(experiment_id)
         task = experiment.get_task(task_id)  # raises KeyError if missing
         task.status = status
         task.result = result
         task.error = error
+        task.note = note
+        await self.save_experiment(experiment)
+
+    async def append_tasks(self, experiment_id: str, tasks: list[ScheduledTask]) -> None:
+        experiment = await self.load_experiment(experiment_id)  # raises KeyError if missing
+
+        existing_ids = {t.id for t in experiment.tasks}
+        duplicates = existing_ids.intersection(t.id for t in tasks)
+        if duplicates:
+            raise ValueError(f"Task id(s) already exist on experiment '{experiment_id}': {duplicates}")
+
+        experiment.tasks.extend(tasks)
         await self.save_experiment(experiment)

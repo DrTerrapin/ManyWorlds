@@ -1,5 +1,8 @@
 from .models import (
+    BranchCondition,
     ExperimentDefinition,
+    FanOutSpec,
+    ResultRef,
     RunStatus,
     ScheduledExperiment,
     ScheduledTask,
@@ -8,26 +11,32 @@ from .models import (
 from .registry import (
     DuplicateTaskTypeError,
     UnknownTaskTypeError,
-    get_step_provider,
-    register_step_provider,
+    get_task_provider,
+    register_task_provider,
     registered_task_types,
 )
+from .executor import TaskExecutor
 from .scheduler import GraphValidationError, Scheduler
-from .step_provider import ClassicalStepProvider, TaskProvider, QuantumStepProvider
+from .task_provider import ClassicalTaskProvider, TaskProvider, QuantumTaskProvider
 
 __all__ = [
+    "BranchCondition",
     "ExperimentDefinition",
+    "FanOutSpec",
+    "ResultRef",
     "RunStatus",
     "ScheduledExperiment",
     "ScheduledTask",
     "TaskDefinition",
-    "ClassicalStepProvider",
-    "QuantumStepProvider",
-    "register_step_provider",
-    "get_step_provider",
+    "ClassicalTaskProvider",
+    "QuantumTaskProvider",
+    "TaskProvider",
+    "register_task_provider",
+    "get_task_provider",
     "registered_task_types",
     "UnknownTaskTypeError",
     "DuplicateTaskTypeError",
     "Scheduler",
     "GraphValidationError",
+    "TaskExecutor",
 ]
