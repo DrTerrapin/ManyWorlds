@@ -15,12 +15,18 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from orchestrator_core import Experiment, StepProvider, Scheduler, Task, register_step_provider
+from orchestrator_core import (
+    ScheduledExperiment,
+    ScheduledTask,
+    Scheduler,
+    TaskProvider,
+    register_step_provider,
+)
 from orchestrator_core.persistence import InMemoryExperimentRepository
 
 
 @register_step_provider("demo.echo")
-class EchoProvider(StepProvider):
+class EchoProvider(TaskProvider):
     """Toy provider: just returns whatever parameters it was given."""
 
     async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
@@ -29,7 +35,7 @@ class EchoProvider(StepProvider):
 
 
 @register_step_provider("demo.always_fails")
-class AlwaysFailsProvider(StepProvider):
+class AlwaysFailsProvider(TaskProvider):
     """Toy provider: always raises, to demonstrate cascading failure."""
 
     async def execute(self, parameters: dict[str, Any]) -> dict[str, Any]:
@@ -37,17 +43,18 @@ class AlwaysFailsProvider(StepProvider):
         raise RuntimeError("simulated failure for demo purposes")
 
 
-def build_demo_experiment() -> Experiment:
-    return Experiment(
+def build_demo_experiment() -> ScheduledExperiment:
+    return ScheduledExperiment(
         id="exp-demo-1",
         name="Fan-out / fan-in / cascade-failure demo",
         tasks=[
-            Task(id="A", task_type="demo.echo", parameters={"data_uri": "s3://bucket/input.csv"}),
-            Task(id="B", task_type="demo.echo", parameters={"step": "B"}, depends_on=["A"]),
-            Task(id="C", task_type="demo.echo", parameters={"step": "C"}, depends_on=["A"]),
-            Task(id="D", task_type="demo.echo", parameters={"step": "D - joins B and C"}, depends_on=["B", "C"]),
-            Task(id="E", task_type="demo.always_fails", parameters={}, depends_on=["A"]),
-            Task(id="F", task_type="demo.echo", parameters={"step": "F - should never run"}, depends_on=["E"]),
+            ScheduledTask(type="demo.echo", parameters={"data_uri": "s3://bucket/input.csv"}),
+            ScheduledTask(type="demo.echo", parameters={"step": "B"}, depends_on=["A"]),
+            ScheduledTask(type="demo.echo", parameters={"step": "C"}, depends_on=["A"]),
+            ScheduledTask(type="demo.echo", parameters={"step": "C"}, depends_on=["A"]),
+            ScheduledTask(type="demo.echo", parameters={"step": "D - joins B and C"}, depends_on=["B", "C"]),
+            ScheduledTask(type="demo.always_fails", parameters={}, depends_on=["A"]),
+            ScheduledTask(type="demo.echo", parameters={"step": "F - should never run"}, depends_on=["E"]),
         ],
     )
 

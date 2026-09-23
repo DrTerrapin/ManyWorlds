@@ -1,4 +1,10 @@
-from .models import Experiment, RunStatus, Task
+from .models import (
+    ExperimentDefinition,
+    RunStatus,
+    ScheduledExperiment,
+    ScheduledTask,
+    TaskDefinition,
+)
 from .registry import (
     DuplicateTaskTypeError,
     UnknownTaskTypeError,
@@ -7,13 +13,14 @@ from .registry import (
     registered_task_types,
 )
 from .scheduler import GraphValidationError, Scheduler
-from .step_provider import ClassicalStepProvider, StepProvider, QuantumStepProvider
+from .step_provider import ClassicalStepProvider, TaskProvider, QuantumStepProvider
 
 __all__ = [
-    "Experiment",
+    "ExperimentDefinition",
     "RunStatus",
-    "Task",
-    "IStepProvider",
+    "ScheduledExperiment",
+    "ScheduledTask",
+    "TaskDefinition",
     "ClassicalStepProvider",
     "QuantumStepProvider",
     "register_step_provider",

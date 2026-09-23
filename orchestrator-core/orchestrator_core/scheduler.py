@@ -15,9 +15,11 @@ rather than looping forever.
 from __future__ import annotations
 
 import asyncio
+from asyncio import tasks
 from datetime import datetime, timezone
+import uuid
 
-from .models import Experiment, RunStatus, Task
+from .models import ExperimentDefinition, RunStatus, ScheduledExperiment, ScheduledTask
 from .persistence.base import ExperimentRepository
 from .registry import get_step_provider
 
@@ -30,12 +32,29 @@ class Scheduler:
     def __init__(self, repository: ExperimentRepository) -> None:
         self._repository = repository
 
-    async def run_experiment(self, experiment: Experiment) -> Experiment:
+    async def schedule_experiment(self, experiment: ExperimentDefinition) -> ScheduledExperiment:
         self._validate_graph(experiment)
 
-        experiment.status = RunStatus.RUNNING
-        experiment.updated_at = _now()
-        await self._repository.save_experiment(experiment)
+        scheduled_experiment = ScheduledExperiment(
+            id=uuid.uuid4(),
+            name=experiment.name,
+            tasks=[],
+            status=RunStatus.PENDING,
+            created_at=_now(),
+            updated_at=_now()
+        )
+
+        scheduled_tasks = [ScheduledTask(
+            name=t.name,
+            order=t.order,
+            type=t.type,
+            parameters=t.parameters) for t in experiment.tasks]
+
+        for (task in scheduled_tasks)
+
+        scheduled_experiment.tasks = tasks
+
+        await self._repository.save_experiment(scheduled_experiment)
 
         tasks_by_id = {task.id: task for task in experiment.tasks}
 
@@ -44,7 +63,7 @@ class Scheduler:
             if not pending:
                 break
 
-            ready: list[Task] = []
+            ready: list[ScheduledTask] = []
             for task in pending:
                 deps = [tasks_by_id[dep_id] for dep_id in task.depends_on]
                 if any(dep.status == RunStatus.FAILED for dep in deps):
@@ -79,12 +98,12 @@ class Scheduler:
         await self._repository.save_experiment(experiment)
         return experiment
 
-    async def _run_task(self, experiment: Experiment, task: Task) -> None:
+    async def _run_task(self, experiment: ScheduledExperiment, task: ScheduledTask) -> None:
         task.status = RunStatus.RUNNING
         await self._repository.update_task(experiment.id, task.id, status=task.status)
 
         try:
-            provider_cls = get_step_provider(task.task_type)
+            provider_cls = get_step_provider(task.type)
             provider = provider_cls()
             task.result = await provider.execute(task.parameters)
             task.status = RunStatus.SUCCEEDED
@@ -97,7 +116,7 @@ class Scheduler:
             experiment.id, task.id, status=task.status, result=task.result, error=task.error
         )
 
-    async def _fail_task(self, experiment: Experiment, task: Task, reason: str) -> None:
+    async def _fail_task(self, experiment: ScheduledExperiment, task: ScheduledTask, reason: str) -> None:
         task.status = RunStatus.FAILED
         task.error = reason
         await self._repository.update_task(
@@ -105,19 +124,19 @@ class Scheduler:
         )
 
     @staticmethod
-    def _validate_graph(experiment: Experiment) -> None:
+    def _validate_graph(experiment: ExperimentDefinition) -> None:
         seen_ids: set[str] = set()
         for task in experiment.tasks:
-            if task.id in seen_ids:
-                raise GraphValidationError(f"Duplicate task id '{task.id}' in experiment '{experiment.id}'.")
-            seen_ids.add(task.id)
+            if task.name in seen_ids:
+                raise GraphValidationError(f"Duplicate task name '{task.name}' in experiment '{experiment.name}'.")
+            seen_ids.add(task.name)
 
         all_ids = seen_ids
         for task in experiment.tasks:
             unknown = [dep_id for dep_id in task.depends_on if dep_id not in all_ids]
             if unknown:
                 raise GraphValidationError(
-                    f"Task '{task.id}' depends_on unknown task id(s): {unknown}"
+                    f"Task '{task.name}' depends_on unknown task name(s): {unknown}"
                 )
 
 

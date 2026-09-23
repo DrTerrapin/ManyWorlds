@@ -10,16 +10,16 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ..models import Experiment, RunStatus
+from ..models import RunStatus, ScheduledExperiment
 
 
 class ExperimentRepository(ABC):
     @abstractmethod
-    async def save_experiment(self, experiment: Experiment) -> None:
+    async def save_experiment(self, experiment: ScheduledExperiment) -> None:
         """Create or fully overwrite an experiment document."""
 
     @abstractmethod
-    async def load_experiment(self, experiment_id: str) -> Experiment:
+    async def load_experiment(self, experiment_id: str) -> ScheduledExperiment:
         """Raises KeyError if no experiment with that id exists."""
 
     @abstractmethod
